@@ -204,7 +204,7 @@ cmd="bin/flynn-test \
   --race \
   --dump-logs"
 
-timeout --kill-after=10 40m $cmd
+timeout --signal=QUIT --kill-after=10 40m $cmd
 `[1:]))
 
 func formatDuration(d time.Duration) string {
