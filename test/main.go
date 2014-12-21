@@ -60,13 +60,18 @@ func main() {
 	var res *check.Result
 	// defer exiting here so it runs after all other defers
 	defer func() {
-		if err != nil || res != nil && !res.Passed() {
-			if args.DumpLogs {
-				if args.Gist {
-					exec.Command("flynn-host", "upload-debug-info").Run()
-				} else if testCluster != nil {
-					testCluster.DumpLogs(os.Stdout)
+		if args.Race || err != nil || res != nil && !res.Passed() {
+			if args.Race {
+				var buf bytes.Buffer
+				testCluster.DumpLogs(&buf)
+				if bytes.Contains(buf.Bytes(), []byte("WARNING: DATA RACE")) {
+					fmt.Printf("\n\n***** DATA RACE DETECTED *****\n\n")
+				} else if err == nil && res != nil && res.Passed() {
+					os.Exit(0)
 				}
+				io.Copy(os.Stdout, &buf)
+			} else if args.DumpLogs {
+				testCluster.DumpLogs(os.Stdout)
 			}
 			os.Exit(1)
 		}

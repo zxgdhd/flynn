@@ -324,6 +324,7 @@ git config user.name "CI"
 git merge origin/master
 {{ end }}
 
+export GO_BUILD_FLAGS="-race"
 make dev
 
 sudo cp host/bin/flynn-* /usr/bin

@@ -201,6 +201,7 @@ cmd="bin/flynn-test \
   --cli $(pwd)/../cli/flynn-cli \
   --router-ip {{ .Cluster.RouterIP }} \
   --debug \
+  --race \
   --dump-logs"
 
 timeout --kill-after=10 20m $cmd
