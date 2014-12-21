@@ -245,7 +245,7 @@ func (s *CLISuite) TestRunSignal(t *c.C) {
 		select {
 		case err := <-done:
 			return err
-		case <-time.After(12 * time.Second):
+		case <-time.After(30 * time.Second):
 			return errors.New("timeout")
 		}
 	}
@@ -420,7 +420,7 @@ func (s *CLISuite) TestLogFollow(t *c.C) {
 				return "", fmt.Errorf("could not read log output: %s", l.err)
 			}
 			return l.text, nil
-		case <-time.After(5 * time.Second):
+		case <-time.After(30 * time.Second):
 			return "", errors.New("timed out waiting for log output")
 		}
 	}

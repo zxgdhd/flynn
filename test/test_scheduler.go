@@ -61,7 +61,7 @@ func (s *SchedulerSuite) addHosts(t *c.C, count int) []string {
 			debug(t, "host added ", event.HostID)
 			testCluster.Instances = append(testCluster.Instances, instance)
 			hosts = append(hosts, event.HostID)
-		case <-time.After(20 * time.Second):
+		case <-time.After(40 * time.Second):
 			t.Fatal("timed out waiting for new host")
 		}
 	}
@@ -102,7 +102,7 @@ func (s *SchedulerSuite) removeHosts(t *c.C, ids []string) {
 					debug(t, "host removed ", update.Addr)
 					break loop
 				}
-			case <-time.After(20 * time.Second):
+			case <-time.After(40 * time.Second):
 				t.Fatal("timed out waiting for host removal")
 			}
 		}
@@ -150,7 +150,7 @@ func waitForJobEvents(t *c.C, events chan *ct.JobEvent, expected jobEvents) (las
 			if jobEventsEqual(expected, actual) {
 				return
 			}
-		case <-time.After(60 * time.Second):
+		case <-time.After(120 * time.Second):
 			t.Fatal("timed out waiting for job events: ", expected)
 		}
 	}
@@ -424,8 +424,8 @@ func (s *SchedulerSuite) TestJobRestartBackoffPolicy(t *c.C) {
 	if testCluster == nil {
 		t.Skip("cannot determine scheduler backoff period")
 	}
-	backoffPeriod := testCluster.BackoffPeriod
-	startTimeout := 20 * time.Second
+	backoffPeriod := testCluster.BackoffPeriod * 4
+	startTimeout := 60 * time.Second
 	debugf(t, "job restart backoff period: %s", backoffPeriod)
 
 	app, release := s.createApp(t)
