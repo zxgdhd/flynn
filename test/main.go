@@ -23,6 +23,7 @@ import (
 	"github.com/flynn/flynn/Godeps/_workspace/src/github.com/flynn/go-check"
 	"github.com/flynn/flynn/Godeps/_workspace/src/github.com/fsouza/go-dockerclient"
 	"github.com/flynn/flynn/Godeps/_workspace/src/golang.org/x/crypto/ssh"
+	"github.com/flynn/flynn/pkg/iotool"
 	"github.com/flynn/flynn/test/arg"
 	"github.com/flynn/flynn/test/cluster"
 )
@@ -63,7 +64,7 @@ func main() {
 		if args.Race || err != nil || res != nil && !res.Passed() {
 			if args.Race {
 				var buf bytes.Buffer
-				testCluster.DumpLogs(&buf)
+				testCluster.DumpLogs(&iotool.SafeWriter{W: &buf})
 				if bytes.Contains(buf.Bytes(), []byte("WARNING: DATA RACE")) {
 					fmt.Printf("\n\n***** DATA RACE DETECTED *****\n\n")
 				} else if err == nil && res != nil && res.Passed() {
