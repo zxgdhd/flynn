@@ -36,6 +36,11 @@ main() {
   install_flynn
   disable_docker_auto_restart
   install_go
+
+  if ec2_instance_build; then
+    fix_instance_boot_config
+  fi
+
   apt_cleanup
 
   if vagrant_build; then
@@ -55,6 +60,10 @@ virtualbox_build() {
 
 vmware_build() {
   [[ "${PACKER_BUILDER_TYPE}" == "vmware-iso" ]]
+}
+
+ec2_instance_build() {
+  [[ "${PACKER_BUILDER_TYPE}" == "amazon-instance" ]]
 }
 
 vagrant_build() {
@@ -160,6 +169,12 @@ add_apt_sources() {
   echo deb http://ppa.launchpad.net/zfs-native/stable/ubuntu trusty main \
     > /etc/apt/sources.list.d/zfs.list
 
+  if ec2_instance_build; then
+    # ec2-ami-tools is in multiverse
+    sed 's/trusty universe/trusty universe multiverse/' -i /etc/apt/sources.list
+    sed 's/trusty-updates universe/trusty-updates universe multiverse/' -i /etc/apt/sources.list
+  fi
+
   apt-get update
 }
 
@@ -182,6 +197,13 @@ install_packages() {
     "ubuntu-zfs"
     "vim-tiny"
   )
+
+  if ec2_instance_build; then
+    packages+=(
+      "ec2-ami-tools"
+      "grub"
+    )
+  fi
 
   apt-get install -y ${packages[@]}
 
@@ -212,6 +234,11 @@ install_go() {
   wget j.mp/godeb
   tar xvzf godeb
   ./godeb install 1.4.1
+}
+
+fix_instance_boot_config() {
+  sed -i 's/console=hvc0/console=ttyS0 xen_emul_unplug=unnecessary/' /boot/grub/menu.lst 
+  sed -i 's/LABEL=UEFI.*//' /etc/fstab
 }
 
 apt_cleanup() {
