@@ -117,6 +117,7 @@
         "FLYNN_REPOSITORY={{ user `flynn_repository` }}",
         "FLYNN_VERSION={{ user `version` }}"
       ],
+      "execute_command": "{{ .Vars }} sudo -E bash '{{ .Path }}'",
       "override": {
         "virtualbox-ovf": {
           "execute_command": "echo 'vagrant' | {{.Vars}} sudo -E -S bash '{{.Path}}'"
