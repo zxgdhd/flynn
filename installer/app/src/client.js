@@ -153,6 +153,30 @@ var Client = {
 		});
 	},
 
+	fetchData: function () {
+		return this.performRequest('GET', {
+			url: Config.endpoints.data
+		}).then(function (args) {
+			var res = args[0];
+
+			this.__lastEventID = res.last_event_id;
+
+			res.credentials.forEach(function (creds) {
+				Dispatcher.dispatch({
+					name: 'NEW_CREDENTIAL',
+					credential: creds
+				});
+			});
+
+			res.clusters.forEach(function (cluster) {
+				Dispatcher.dispatch({
+					name: 'NEW_CLUSTER',
+					cluster: Cluster.newOfType(cluster.type, cluster)
+				});
+			});
+		}.bind(this));
+	},
+
 	openEventStream: function () {
 		if (this.__es && this.__es.readyState !== 2) {
 			return false;
@@ -164,7 +188,7 @@ var Client = {
 				this.openEventStream();
 			}
 		}.bind(this);
-		var es = this.__es = new EventSource(Config.endpoints.events);
+		var es = this.__es = new EventSource(Config.endpoints.events +'?last_event_id='+ (this.__lastEventID || ''));
 		es.addEventListener('error', function (e) {
 			window.console.error('event stream error: ', e);
 			es.close();
@@ -176,6 +200,7 @@ var Client = {
 			if (data.cluster_id !== undefined) {
 				event.clusterID = data.cluster_id;
 			}
+			console.log('event: ', event, data);
 			switch (data.type) {
 			case 'new_cluster':
 				if (data.cluster) {

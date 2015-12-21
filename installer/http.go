@@ -48,15 +48,13 @@ type httpAPI struct {
 	clientConfig installerJSConfig
 }
 
-func ServeHTTP() error {
-	logger := log.New()
-	installer := NewInstaller(logger)
-
+func (installer *Installer) ServeHTTP() error {
 	api := &httpAPI{
 		Installer: installer,
-		logger:    logger,
+		logger:    installer.logger,
 		clientConfig: installerJSConfig{
 			Endpoints: map[string]string{
+				"data":               "/api/data",
 				"clusters":           "/api/clusters",
 				"cluster":            "/api/clusters/:id",
 				"cert":               "/api/clusters/:id/ca-cert",
@@ -92,6 +90,7 @@ func ServeHTTP() error {
 	router.GET("/api/clusters/:id", api.GetCluster)
 	router.GET("/api/clusters/:id/ca-cert", api.GetCert)
 	router.DELETE("/api/clusters/:id", api.DeleteCluster)
+	router.GET("/api/data", api.GetData)
 	router.GET("/api/events", api.GetEvents)
 	router.POST("/api/clusters/:id/prompts/:prompt_id", api.RespondToPrompt)
 	router.POST("/api/credentials", api.NewCredential)
@@ -199,7 +198,8 @@ func (api *httpAPI) LaunchCluster(w http.ResponseWriter, req *http.Request, para
 
 	base.ID = fmt.Sprintf("flynn-%d", time.Now().Unix())
 	base.State = "starting"
-	base.installer = api.Installer
+	base.data = api.Installer.Data
+	base.logger = api.logger
 
 	if err := decodeJSON(&cluster); err != nil {
 		httphelper.Error(w, err)
@@ -243,21 +243,29 @@ func (api *httpAPI) DeleteCluster(w http.ResponseWriter, req *http.Request, para
 	w.WriteHeader(200)
 }
 
+func (api *httpAPI) GetData(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	data := api.Installer.GetData()
+	httphelper.JSON(w, 200, data)
+}
+
 func (api *httpAPI) GetEvents(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	eventChan := make(chan *Event)
 	lastEventID := req.Header.Get("Last-Event-ID")
-	sub := api.Installer.Subscribe(eventChan, lastEventID)
-	defer api.Installer.Unsubscribe(sub)
+	if lastEventID == "" {
+		lastEventID = req.URL.Query().Get("last_event_id")
+	}
+	sub := api.Installer.SubscribeEvents(eventChan, lastEventID)
+	defer api.Installer.UnsubscribeEvents(sub)
 	sse.ServeStream(w, eventChan, api.logger)
 }
 
 func (api *httpAPI) RespondToPrompt(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
-	cluster, err := api.Installer.FindCluster(params.ByName("id"))
+	cluster, err := api.Installer.FindBaseCluster(params.ByName("id"))
 	if err != nil {
 		httphelper.ObjectNotFoundError(w, "cluster not found")
 		return
 	}
-	prompt, err := cluster.Base().findPrompt(params.ByName("prompt_id"))
+	prompt, err := api.Installer.FetchPrompt(cluster.ID, params.ByName("prompt_id"))
 	if err != nil {
 		httphelper.ObjectNotFoundError(w, "prompt not found")
 		return
@@ -351,7 +359,7 @@ func (api *httpAPI) GetAzureSubscriptions(w http.ResponseWriter, req *http.Reque
 		httphelper.ValidationError(w, "credential_id", "Invalid credential id")
 		return
 	}
-	client := api.Installer.azureClient(creds)
+	client := api.Installer.AzureClient(creds)
 	res, err := client.ListSubscriptions()
 	if err != nil {
 		httphelper.Error(w, err)

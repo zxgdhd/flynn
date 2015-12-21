@@ -23,7 +23,7 @@ export default {
 			dispatcher: Dispatcher
 		});
 
-		Client.openEventStream();
+		Client.fetchData().then(Client.openEventStream.bind(Client));
 	},
 
 	render: function (component, props, children) {
