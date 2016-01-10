@@ -46,16 +46,17 @@ type OAuthCredential struct {
 }
 
 type AWSCluster struct {
-	ClusterID    string     `json:"cluster_id" ql:"index xCluster"`
-	StackID      string     `json:"stack_id"`
-	StackName    string     `json:"stack_name"`
-	ImageID      string     `json:"image_id,omitempty"`
-	Region       string     `json:"region"`
-	InstanceType string     `json:"instance_type"`
-	VpcCIDR      string     `json:"vpc_cidr"`
-	SubnetCIDR   string     `json:"subnet_cidr"`
-	DNSZoneID    string     `json:"dns_zone_id"`
-	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	ClusterID      string     `json:"cluster_id" ql:"index xCluster"`
+	StackID        string     `json:"stack_id"`
+	StackName      string     `json:"stack_name"`
+	ImageID        string     `json:"image_id,omitempty"`
+	Region         string     `json:"region"`
+	InstanceType   string     `json:"instance_type"`
+	DataVolumeSize int        `json:"data_volume_size"`
+	VpcCIDR        string     `json:"vpc_cidr"`
+	SubnetCIDR     string     `json:"subnet_cidr"`
+	DNSZoneID      string     `json:"dns_zone_id"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
 
 	base  *BaseCluster
 	creds aws.CredentialsProvider

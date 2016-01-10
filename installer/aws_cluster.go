@@ -113,6 +113,10 @@ func (c *AWSCluster) SetDefaultsAndValidate() error {
 		c.InstanceType = DefaultInstanceType
 	}
 
+	if c.DataVolumeSize == 0 {
+		c.DataVolumeSize = 50
+	}
+
 	if c.VpcCIDR == "" {
 		c.VpcCIDR = "10.0.0.0/16"
 	}
@@ -134,6 +138,10 @@ func (c *AWSCluster) SetDefaultsAndValidate() error {
 }
 
 func (c *AWSCluster) validateInputs() error {
+	if c.DataVolumeSize < 50 || c.DataVolumeSize > 1024 {
+		return fmt.Errorf("Invalid data volume size %s, must be between 50 and 1024GB", c.DataVolumeSize)
+	}
+
 	if c.Region == "" {
 		return fmt.Errorf("No region specified")
 	}
@@ -414,6 +422,10 @@ func (c *AWSCluster) createStack() error {
 		{
 			ParameterKey:   aws.String("InstanceType"),
 			ParameterValue: aws.String(c.InstanceType),
+		},
+		{
+			ParameterKey:   aws.String("DataVolumeSize"),
+			ParameterValue: aws.String(c.DataVolumeSize),
 		},
 		{
 			ParameterKey:   aws.String("VpcCidrBlock"),
