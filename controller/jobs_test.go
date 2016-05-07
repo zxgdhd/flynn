@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 
+	"github.com/flynn/flynn/controller/client"
 	tu "github.com/flynn/flynn/controller/testutils"
 	ct "github.com/flynn/flynn/controller/types"
 	host "github.com/flynn/flynn/host/types"
@@ -23,14 +24,16 @@ func (s *S) TestJobList(c *C) {
 	id := random.UUID()
 	s.createTestJob(c, &ct.Job{UUID: id, AppID: app.ID, ReleaseID: release.ID, Type: "web", State: ct.JobStateStarting, Meta: map[string]string{"some": "info"}})
 
-	list, err := s.c.JobList(app.ID)
-	c.Assert(err, IsNil)
-	c.Assert(len(list), Equals, 1)
-	job := list[0]
-	c.Assert(job.UUID, Equals, id)
-	c.Assert(job.AppID, Equals, app.ID)
-	c.Assert(job.ReleaseID, Equals, release.ID)
-	c.Assert(job.Meta, DeepEquals, map[string]string{"some": "info"})
+	s.withEachClient(func(client controller.Client) {
+		list, err := client.JobList(app.ID)
+		c.Assert(err, IsNil)
+		c.Assert(len(list), Equals, 1)
+		job := list[0]
+		c.Assert(job.UUID, Equals, id)
+		c.Assert(job.AppID, Equals, app.ID)
+		c.Assert(job.ReleaseID, Equals, release.ID)
+		c.Assert(job.Meta, DeepEquals, map[string]string{"some": "info"})
+	})
 }
 
 func (s *S) TestJobListActive(c *C) {
@@ -61,9 +64,13 @@ func (s *S) TestJobListActive(c *C) {
 		createJob(ct.JobStateUp),
 	}
 
-	list, err := s.c.JobListActive()
-	c.Assert(err, IsNil)
-	c.Assert(list, HasLen, 6)
+	var list []*ct.Job
+	var err error
+	s.withEachClient(func(client controller.Client) {
+		list, err = client.JobListActive()
+		c.Assert(err, IsNil)
+		c.Assert(list, HasLen, 6)
+	})
 
 	// check that we only get jobs with a pending, starting or up state,
 	// most recently updated first
@@ -95,14 +102,16 @@ func (s *S) TestJobGet(c *C) {
 
 	// test getting the job with both the job ID and the UUID
 	for _, id := range []string{jobID, uuid} {
-		job, err := s.c.GetJob(app.ID, id)
-		c.Assert(err, IsNil)
-		c.Assert(job.ID, Equals, jobID)
-		c.Assert(job.UUID, Equals, uuid)
-		c.Assert(job.HostID, Equals, hostID)
-		c.Assert(job.AppID, Equals, app.ID)
-		c.Assert(job.ReleaseID, Equals, release.ID)
-		c.Assert(job.Meta, DeepEquals, map[string]string{"some": "info"})
+		s.withEachClient(func(client controller.Client) {
+			job, err := client.GetJob(app.ID, id)
+			c.Assert(err, IsNil)
+			c.Assert(job.ID, Equals, jobID)
+			c.Assert(job.UUID, Equals, uuid)
+			c.Assert(job.HostID, Equals, hostID)
+			c.Assert(job.AppID, Equals, app.ID)
+			c.Assert(job.ReleaseID, Equals, release.ID)
+			c.Assert(job.Meta, DeepEquals, map[string]string{"some": "info"})
+		})
 	}
 }
 
@@ -150,7 +159,7 @@ func (s *S) TestKillJob(c *C) {
 
 func (s *S) TestRunJobDetached(c *C) {
 	app := s.createTestApp(c, &ct.App{Name: "run-detached"})
-	artifact := s.createTestArtifact(c, &ct.Artifact{Type: host.ArtifactTypeDocker, URI: "docker://foo/bar"})
+	artifact := s.createTestArtifact(c, s.c, &ct.Artifact{Type: host.ArtifactTypeDocker, URI: "docker://foo/bar"})
 	hostID := fakeHostID()
 	host := tu.NewFakeHostClient(hostID, false)
 	s.cc.AddHost(host)
@@ -232,7 +241,7 @@ func (s *S) TestRunJobAttached(c *C) {
 		}{outPipeR, inPipeW}), nil
 	})
 
-	artifact := s.createTestArtifact(c, &ct.Artifact{Type: host.ArtifactTypeDocker, URI: "docker://foo/bar"})
+	artifact := s.createTestArtifact(c, s.c, &ct.Artifact{Type: host.ArtifactTypeDocker, URI: "docker://foo/bar"})
 	release := s.createTestRelease(c, &ct.Release{
 		ArtifactIDs: []string{artifact.ID},
 		Env:         map[string]string{"RELEASE": "true", "FOO": "bar"},
