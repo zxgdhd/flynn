@@ -159,9 +159,11 @@ func (b *Builder) mksquashfs(dir string) (string, *ct.ImageLayer, error) {
 		return "", nil, err
 	}
 
+	sha512 := hex.EncodeToString(h.Sum(nil))
 	return tmp.Name(), &ct.ImageLayer{
+		ID:     sha512,
 		Type:   ct.ImageLayerTypeSquashfs,
 		Length: length,
-		Hashes: map[string]string{"sha512": hex.EncodeToString(h.Sum(nil))},
+		Hashes: map[string]string{"sha512": sha512},
 	}, nil
 }
