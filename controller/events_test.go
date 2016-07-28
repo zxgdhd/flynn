@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flynn/flynn/controller/client"
 	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/pkg/random"
 	. "github.com/flynn/go-check"
@@ -476,4 +477,104 @@ func (s *S) TestGetEvent(c *C) {
 	event, err := s.c.GetEvent(events[0].ID)
 	c.Assert(err, IsNil)
 	c.Assert(event, DeepEquals, events[0])
+}
+
+func (s *S) TestGetEvents(c *C) {
+	// EventTypeApp [create]
+	app := s.createTestApp(c, &ct.App{})
+	s.withEachClient(func(client controller.Client) {
+		events, err := client.ListEvents(ct.ListEventsOptions{
+			ObjectTypes: []ct.EventType{ct.EventTypeApp},
+			AppID:       app.ID,
+		})
+		c.Assert(err, IsNil)
+		c.Assert(len(events), Equals, 1)
+
+		event, err := s.c.GetEvent(events[0].ID)
+		c.Assert(err, IsNil)
+		c.Assert(event, DeepEquals, events[0])
+	})
+
+	// EventTypeRelease
+	release := s.createTestRelease(c, s.c, &ct.Release{})
+	s.withEachClient(func(client controller.Client) {
+		events, err := client.ListEvents(ct.ListEventsOptions{
+			ObjectTypes: []ct.EventType{ct.EventTypeRelease},
+		})
+		c.Assert(err, IsNil)
+		c.Assert(len(events), Equals, 1)
+
+		event, err := s.c.GetEvent(events[0].ID)
+		c.Assert(err, IsNil)
+		c.Assert(event, DeepEquals, events[0])
+	})
+
+	// EventTypeAppRelease
+	c.Assert(s.c.SetAppRelease(app.ID, release.ID), IsNil)
+	s.withEachClient(func(client controller.Client) {
+		events, err := client.ListEvents(ct.ListEventsOptions{
+			ObjectTypes: []ct.EventType{ct.EventTypeAppRelease},
+			AppID:       app.ID,
+		})
+		c.Assert(err, IsNil)
+		c.Assert(len(events), Equals, 1)
+
+		event, err := s.c.GetEvent(events[0].ID)
+		c.Assert(err, IsNil)
+		c.Assert(event, DeepEquals, events[0])
+	})
+
+	// EventTypeApp [update]
+	app.Meta = map[string]string{
+		"foo": "bar",
+	}
+	c.Assert(s.c.UpdateApp(app), IsNil)
+	s.withEachClient(func(client controller.Client) {
+		events, err := client.ListEvents(ct.ListEventsOptions{
+			ObjectTypes: []ct.EventType{ct.EventTypeApp},
+			AppID:       app.ID,
+		})
+		c.Assert(err, IsNil)
+		c.Assert(len(events), Equals, 1)
+
+		event, err := s.c.GetEvent(events[0].ID)
+		c.Assert(err, IsNil)
+		c.Assert(event, DeepEquals, events[0])
+	})
+
+	// TODO(jvatic): EventTypeDeployment
+	// TODO(jvatic): EventTypeJob
+	// TODO(jvatic): EventTypeScale
+	// TODO(jvatic): EventTypeReleaseDeletion
+	// TODO(jvatic): EventTypeArtifact
+	// TODO(jvatic): EventTypeProvider
+	// TODO(jvatic): EventTypeResource
+	// TODO(jvatic): EventTypeResourceDeletion
+	// TODO(jvatic): EventTypeResourceAppDeletion
+	// TODO(jvatic): EventTypeRoute
+	// TODO(jvatic): EventTypeRouteDeletion
+	// TODO(jvatic): EventTypeDomainMigration
+	// TODO(jvatic): EventTypeClusterBackup
+	// TODO(jvatic): EventTypeAppGarbageCollection
+
+	// TODO(jvatic): EventTypeApp [update]
+
+	// EventTypeAppDeletion
+	c.Assert(createEvent(s.db.Exec, &ct.Event{
+		AppID:      app.ID,
+		ObjectID:   app.ID,
+		ObjectType: ct.EventTypeAppDeletion,
+	}, &ct.AppDeletion{AppID: app.ID}), IsNil)
+	s.withEachClient(func(client controller.Client) {
+		events, err := client.ListEvents(ct.ListEventsOptions{
+			ObjectTypes: []ct.EventType{ct.EventTypeAppDeletion},
+			AppID:       app.ID,
+		})
+		c.Assert(err, IsNil)
+		c.Assert(len(events), Equals, 1)
+
+		event, err := s.c.GetEvent(events[0].ID)
+		c.Assert(err, IsNil)
+		c.Assert(event, DeepEquals, events[0])
+	})
 }

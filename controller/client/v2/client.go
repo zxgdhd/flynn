@@ -821,7 +821,58 @@ func (c *Client) StreamEvents(opts ct.StreamEventsOptions, output chan *ct.Event
 }
 
 func (c *Client) ListEvents(opts ct.ListEventsOptions) ([]*ct.Event, error) {
-	return c.v1client.ListEvents(opts)
+	r, w := io.Pipe()
+	errChan := make(chan error)
+	go func() {
+		errChan <- json.NewEncoder(w).Encode(opts)
+	}()
+	var variables map[string]interface{}
+	if err := json.NewDecoder(r).Decode(&variables); err != nil {
+		return nil, err
+	}
+	if err := <-errChan; err != nil {
+		return nil, err
+	}
+	data, err := c.graphqlRequest(&handler.RequestOptions{
+		Query: `query events($object_types: [String], $object_id: String, $app_id: String, $count: Int, $before_id: Int, $since_id: Int) {
+			events(object_types: $object_types, object_id: $object_id, app_id: $app_id, count: $count, before_id: $before_id, since_id: $since_id)  {
+				id
+				object_type
+				object_id
+				app {
+					id
+				}
+				...on EventApp {
+					data {
+						id
+						name
+						meta
+						strategy
+						current_release {
+							id
+						}
+						deploy_timeout
+						created_at
+						updated_at
+					}
+				}
+				created_at
+			}
+		}`,
+		Variables: variables,
+	})
+	if err != nil {
+		return nil, err
+	}
+	l := []*gt.Event{}
+	if err := json.Unmarshal(data["events"], &l); err != nil {
+		return nil, err
+	}
+	list := make([]*ct.Event, len(l))
+	for i, event := range l {
+		list[i] = event.ToStandardType()
+	}
+	return list, nil
 }
 
 func (c *Client) GetEvent(id int64) (*ct.Event, error) {

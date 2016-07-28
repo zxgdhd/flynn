@@ -1,6 +1,7 @@
 package graphqltypes
 
 import (
+	"encoding/json"
 	"time"
 
 	ct "github.com/flynn/flynn/controller/types"
@@ -287,5 +288,29 @@ func (j *Job) ToStandardType() *ct.Job {
 		Restarts:   j.Restarts,
 		CreatedAt:  j.CreatedAt,
 		UpdatedAt:  j.UpdatedAt,
+	}
+}
+
+type Event struct {
+	ID         int64           `json:"id,omitempty"`
+	App        *App            `json:"app,omitempty"`
+	ObjectType ct.EventType    `json:"object_type,omitempty"`
+	ObjectID   string          `json:"object_id,omitempty"`
+	Data       json.RawMessage `json:"data,omitempty"`
+	CreatedAt  *time.Time      `json:"created_at,omitempty"`
+}
+
+func (e *Event) ToStandardType() *ct.Event {
+	var appID string
+	if e.App != nil {
+		appID = e.App.ID
+	}
+	return &ct.Event{
+		ID:         e.ID,
+		AppID:      appID,
+		ObjectType: e.ObjectType,
+		ObjectID:   e.ObjectID,
+		Data:       e.Data,
+		CreatedAt:  e.CreatedAt,
 	}
 }

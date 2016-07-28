@@ -38,6 +38,7 @@ type S struct {
 	hc       handlerConfig
 	c        controller.Client
 	graphqlc controller.Client
+	db       *postgres.DB
 	flac     *fakeLogAggregatorClient
 	caCert   []byte
 }
@@ -82,6 +83,7 @@ func (s *S) SetUpSuite(c *C) {
 		c.Fatal(err)
 	}
 	db = postgres.New(pgxpool, nil)
+	s.db = db
 
 	ca, err := certgen.Generate(certgen.Params{IsCA: true})
 	if err != nil {
