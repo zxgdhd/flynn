@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,6 +23,7 @@ import (
 	"github.com/flynn/flynn/host/types"
 	"github.com/flynn/flynn/pkg/exec"
 	"github.com/flynn/flynn/pkg/random"
+	"github.com/flynn/flynn/pkg/tlscert"
 	"github.com/flynn/go-docopt"
 )
 
@@ -223,6 +225,15 @@ $function$;
 		return fmt.Errorf("error decoding manifest json: %s", err)
 	}
 
+	manifestStepMap := make(map[string]bootstrap.Step, len(manifestSteps))
+	steps, err := bootstrap.UnmarshalManifest(manifest, nil)
+	if err != nil {
+		return fmt.Errorf("error decoding manifest json: %s", err)
+	}
+	for _, step := range steps {
+		manifestStepMap[step.StepMeta.ID] = step
+	}
+
 	artifactURIs := make(map[string]string)
 	updateProcArgs := func(f *ct.ExpandedFormation, step *manifestStep) {
 		for typ, proc := range step.Release.Processes {
@@ -362,6 +373,7 @@ WHERE env->>'%[1]s_IMAGE_URI' IS NOT NULL;`,
 		}),
 	}
 
+	shouldDeployMariaDB := false
 	// Only run up MariaDB if it's in the backup
 	if data.MariaDB != nil {
 		systemSteps = append(systemSteps, step("mariadb", "run-app", &bootstrap.RunAppAction{
@@ -370,8 +382,11 @@ WHERE env->>'%[1]s_IMAGE_URI' IS NOT NULL;`,
 		systemSteps = append(systemSteps, step("mariadb-wait", "wait", &bootstrap.WaitAction{
 			URL: "http://mariadb-api.discoverd/ping",
 		}))
+	} else {
+		shouldDeployMariaDB = true
 	}
 
+	shouldDeployMongoDB := false
 	// Only run up MongoDB if it's in the backup
 	if data.MongoDB != nil {
 		systemSteps = append(systemSteps, step("mongodb", "run-app", &bootstrap.RunAppAction{
@@ -380,6 +395,8 @@ WHERE env->>'%[1]s_IMAGE_URI' IS NOT NULL;`,
 		systemSteps = append(systemSteps, step("mongodb-wait", "wait", &bootstrap.WaitAction{
 			URL: "http://mongodb-api.discoverd/ping",
 		}))
+	} else {
+		shouldDeployMongoDB = true
 	}
 
 	state, err := systemSteps.Run(ch, cfg)
@@ -392,6 +409,15 @@ WHERE env->>'%[1]s_IMAGE_URI' IS NOT NULL;`,
 UPDATE releases SET env = pg_temp.json_object_update_key(env, 'DISCOVERD_PEERS', '%s')
 WHERE release_id = (SELECT release_id FROM apps WHERE name = 'discoverd')
 `, state.StepData["discoverd"].(*bootstrap.RunAppState).Release.Env["DISCOVERD_PEERS"]))
+
+	// make sure STATUS_KEY is set in dashboard release
+	sqlBuf.WriteString(`
+UPDATE releases SET env = jsonb_set(env, '{STATUS_KEY}', (
+	SELECT env->'AUTH_KEY' FROM releases
+	WHERE release_id = (SELECT release_id FROM apps WHERE name = 'status')
+))
+WHERE release_id = (SELECT release_id FROM apps WHERE name = 'dashboard')
+`)
 
 	// load data into postgres
 	cmd := exec.JobUsingHost(state.Hosts[0], host.Artifact{Type: data.Postgres.ImageArtifact.Type, URI: data.Postgres.ImageArtifact.URI}, nil)
@@ -504,11 +530,15 @@ WHERE release_id = (SELECT release_id FROM apps WHERE name = 'discoverd')
 		return fmt.Errorf("error getting controller instance: %s", err)
 	}
 
-	// get blobstore config
-	client, err := controller.NewClient("http://"+controllerInstances[0].Addr, data.Controller.Release.Env["AUTH_KEY"])
+	// this is used a few times below
+	controllerKey := data.Controller.Release.Env["AUTH_KEY"]
+
+	client, err := controller.NewClient("http://"+controllerInstances[0].Addr, controllerKey)
 	if err != nil {
 		return err
 	}
+
+	// get blobstore config
 	blobstoreRelease, err := client.GetAppRelease("blobstore")
 	if err != nil {
 		return fmt.Errorf("error getting blobstore release: %s", err)
@@ -517,7 +547,7 @@ WHERE release_id = (SELECT release_id FROM apps WHERE name = 'discoverd')
 	if err != nil {
 		return fmt.Errorf("error getting blobstore expanded formation: %s", err)
 	}
-	state.SetControllerKey(data.Controller.Release.Env["AUTH_KEY"])
+	state.SetControllerKey(controllerKey)
 	ch <- &bootstrap.StepInfo{StepMeta: meta, State: "done", Timestamp: time.Now().UTC()}
 
 	// start blobstore, scheduler, and enable cluster monitor
@@ -547,6 +577,64 @@ WHERE release_id = (SELECT release_id FROM apps WHERE name = 'discoverd')
 	}.RunWithState(ch, state)
 	if err != nil {
 		return err
+	}
+
+	// mariadb and mongodb steps require the controller key
+	state.StepData["controller-key"] = &bootstrap.RandomData{controllerKey}
+
+	// deploy mariadb if it wasn't restored from the backup
+	if shouldDeployMariaDB {
+		steps := bootstrap.Manifest{
+			manifestStepMap["mariadb-password"],
+			manifestStepMap["mariadb"],
+			manifestStepMap["add-mysql-provider"],
+			manifestStepMap["mariadb-wait"],
+		}
+		if _, err := steps.RunWithState(ch, state); err != nil {
+			return fmt.Errorf("error deploying mariadb: %s", err)
+		}
+	}
+
+	// deploy mongodb if it wasn't restored from the backup
+	if shouldDeployMongoDB {
+		steps := bootstrap.Manifest{
+			manifestStepMap["mongodb-password"],
+			manifestStepMap["mongodb"],
+			manifestStepMap["add-mongodb-provider"],
+			manifestStepMap["mongodb-wait"],
+		}
+		if _, err := steps.RunWithState(ch, state); err != nil {
+			return fmt.Errorf("error deploying mongodb: %s", err)
+		}
+	}
+
+	// deploy docker-receive if it wasn't in the backup
+	if _, err := client.GetApp("docker-receive"); err == controller.ErrNotFound {
+		routes, err := client.RouteList("controller")
+		if len(routes) == 0 {
+			err = errors.New("no routes found")
+		}
+		if err != nil {
+			return fmt.Errorf("error listing controller routes: %s", err)
+		}
+		for _, r := range routes {
+			if r.Domain == fmt.Sprintf("controller.%s", data.Controller.Release.Env["DEFAULT_ROUTE_DOMAIN"]) {
+				state.StepData["controller-cert"] = &tlscert.Cert{
+					Cert:       r.Certificate.Cert,
+					PrivateKey: r.Certificate.Key,
+				}
+				break
+			}
+		}
+		steps := bootstrap.Manifest{
+			manifestStepMap["docker-receive-secret"],
+			manifestStepMap["docker-receive"],
+			manifestStepMap["docker-receive-route"],
+			manifestStepMap["docker-receive-wait"],
+		}
+		if _, err := steps.RunWithState(ch, state); err != nil {
+			return fmt.Errorf("error deploying docker-receive: %s", err)
+		}
 	}
 
 	return nil
