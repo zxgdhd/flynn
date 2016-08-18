@@ -4,13 +4,12 @@ ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update &&\
     apt-get install -y software-properties-common apt-transport-https &&\
-    apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xcbcb082a1bb943db &&\
-    add-apt-repository 'deb http://mirrors.syringanetworks.net/mariadb/repo/10.1/ubuntu trusty main' &&\
-    apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 1C4CBDCDCD2EFD2A &&\
+    apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 CD2EFD2A &&\
+    add-apt-repository 'deb http://flynn-apt.s3.amazonaws.com/ stable main' &&\
     add-apt-repository 'deb http://repo.percona.com/apt trusty main' &&\
     apt-get update &&\
     apt-get install -y sudo &&\
-    apt-get install -y mariadb-server percona-xtrabackup &&\
+    apt-get install -y --allow-unauthenticated mariadb-server-10.1 percona-xtrabackup &&\
     apt-get clean &&\
     apt-get autoremove -y
 
