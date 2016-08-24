@@ -1184,7 +1184,7 @@ func (s *CLISuite) TestSlugReleaseGarbageCollection(t *c.C) {
 		res.Body.Close()
 		t.Assert(res.StatusCode, c.Equals, http.StatusOK)
 		artifact := &ct.Artifact{
-			Type: ct.ArtifactTypeFile,
+			Type: ct.ArtifactTypeFlynn,
 			URI:  "http://example.com/image.json",
 			Meta: map[string]string{"blobstore": "true"},
 			Manifest: &ct.ImageManifest{

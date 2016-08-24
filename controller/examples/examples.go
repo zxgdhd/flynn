@@ -185,7 +185,6 @@ func (e *generator) getInitialAppRelease() {
 	if artifact, err := e.client.GetArtifact(appRelease.Env["SLUGRUNNER_IMAGE_ID"]); err == nil {
 		e.resourceIds["SLUGRUNNER_IMAGE_URI"] = artifact.URI
 	}
-	e.resourceIds["SLUGRUNNER_IMAGE_URI"] = artifact.URI
 }
 
 func (e *generator) getApp() {
