@@ -192,8 +192,8 @@ func (h *Helper) createArtifact(t *c.C, name string) *ct.Artifact {
 	defer f.Close()
 	artifact := &ct.Artifact{
 		Type:             ct.ArtifactTypeFlynn,
-		URI:              fmt.Sprintf("https://example.com?target=/image/manifests/%s.json", name),
-		LayerURLTemplate: "file:///var/lib/flynn/layer-cache/{id}.squashfs",
+		URI:              fmt.Sprintf("https://example.com?target=/images/%s.json", name),
+		LayerURLTemplate: "file:///tmp/flynn-layer-cache/{id}.squashfs",
 	}
 	t.Assert(json.NewDecoder(f).Decode(&artifact.Manifest), c.IsNil)
 	t.Assert(h.controllerClient(t).CreateArtifact(artifact), c.IsNil)
